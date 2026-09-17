@@ -1,0 +1,16 @@
+[project]
+name = "nikolai-ml"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "pelkoa-glitch",email = "sergey.koroteev.dev@gmail.com"}
+]
+license = "MIT"
+requires-python = ">=3.13"
+dependencies = [
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
