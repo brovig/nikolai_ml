@@ -1,0 +1,42 @@
+services:
+  piper-train:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile
+    container_name: piper-train-nikolai
+    image: piper-train-nikolai
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    # Проброс устройств NVIDIA
+    devices:
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+    volumes:
+      # Монтируем всю папку nikolai_ml внутрь контейнера
+      - .:/nikolai_ml
+
+    security_opt:
+      - no-new-privileges:true
+
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    command: ["tail", "-f", "/dev/null"]

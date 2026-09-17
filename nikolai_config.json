@@ -1,0 +1,22 @@
+{
+  "dataset": "/nikolai_ml/filelist.txt",
+  "audio": {
+    "sample_rate": 22050,
+    "quality": 22050
+  },
+  "espeak": {
+    "voice": "ru"
+  },
+  "model": {
+    "num_symbols": 256,
+    "n_speakers": 1,
+    "speaker_id_map": {
+      "nikolai": 0
+    }
+  },
+  "training": {
+    "batch_size": 4,
+    "learning_rate": 0.0002,
+    "epochs": 1000
+  }
+}

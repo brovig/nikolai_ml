@@ -2,3 +2,6 @@ source_text.txt
 .venv
 .vscode
 dataset_nikolai
+dataset_nikolai_wo_dict
+piper
+filelist.txt

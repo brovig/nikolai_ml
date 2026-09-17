@@ -149,8 +149,16 @@ def normalize_wav(wav_path: Path):
             temp_path.unlink()
 
 def main():
+    import time
+    from datetime import datetime, timedelta
+    
     args = parse_args()
     max_phrases = args.max_phrases
+    
+    start_time = time.time()
+    start_datetime = datetime.now()
+    
+    print(f"🚀 Начало генерации: {start_datetime.strftime('%H:%M:%S')}")
     
     check_dependencies()
     
@@ -171,12 +179,16 @@ def main():
         if response.lower() != 'y':
             sys.exit("Отменено.")
     
-    print(f"📝 Найдено {len(sentences)} фраз для озвучки.")
-    print(f"📁 Датасет будет в: {OUTPUT_DIR}/")
-    print("⏱️  Примерное время: 1–3 часа (для полного датасета)\n")
+    total_phrases = len(sentences)
+    print(f"📝 Найдено {total_phrases} фраз для озвучки.")
+    print(f"📁 Датасет будет в: {OUTPUT_DIR}/\n")
     
     success_count = 0
+    phrase_times = []  # Для расчёта среднего времени
+    
     for i, sentence in enumerate(sentences):
+        phrase_start = time.time()
+        
         wav_name = f"nikolai_{i:05d}.wav"
         lab_name = f"nikolai_{i:05d}.lab"
         wav_path = Path(OUTPUT_DIR) / wav_name
@@ -187,20 +199,57 @@ def main():
             success_count += 1
             continue
         
-        # Прогресс-бар
-        progress = (i + 1) / len(sentences) * 100
-        print(f"\r[{progress:5.1f}%] [{i+1}/{len(sentences)}] {wav_name}", end="", flush=True)
+        # Расчёт времени
+        elapsed = time.time() - start_time
+        elapsed_str = str(timedelta(seconds=int(elapsed)))
+        
+        # ETA (примерное оставшееся время)
+        if phrase_times:
+            avg_time = sum(phrase_times) / len(phrase_times)
+            remaining = total_phrases - i
+            eta_seconds = avg_time * remaining
+            eta_str = str(timedelta(seconds=int(eta_seconds)))
+        else:
+            eta_str = "расчёт..."
+        
+        # Прогресс-бар с временем
+        progress = (i + 1) / total_phrases * 100
+        print(f"\r[{progress:5.1f}%] [{i+1}/{total_phrases}] {wav_name} | ⏱️ {elapsed_str} | ETA: {eta_str}", end="", flush=True)
         
         if generate_wav(sentence, wav_path):
             normalize_wav(wav_path)
             lab_path.write_text(sentence, encoding="utf-8")
             success_count += 1
+            
+            # Запоминаем время на фразу
+            phrase_time = time.time() - phrase_start
+            phrase_times.append(phrase_time)
         else:
             if wav_path.exists():
                 wav_path.unlink()
     
+    # Финальная статистика
+    end_time = time.time()
+    total_time = end_time - start_time
+    total_time_str = str(timedelta(seconds=int(total_time)))
+    end_datetime = datetime.now()
+    
     print(f"\n\n🎉 Готово!")
-    print(f"✅ Успешно: {success_count}/{len(sentences)}")
+    print(f"✅ Успешно: {success_count}/{total_phrases}")
+    
+    if success_count > 0:
+        total_size = sum(f.stat().st_size for f in Path(OUTPUT_DIR).glob('*.wav'))
+        print(f"📊 Размер датасета: {total_size / 1024 / 1024:.1f} MB")
+        
+        if phrase_times:
+            avg_per_phrase = sum(phrase_times) / len(phrase_times)
+            print(f"⚡ Среднее время на фразу: {avg_per_phrase:.2f} сек")
+    
+    print(f"\n⏱️  Начало: {start_datetime.strftime('%H:%M:%S')}")
+    print(f"⏱️  Конец: {end_datetime.strftime('%H:%M:%S')}")
+    print(f"⏱️  Всего затрачено: {total_time_str}")
+    
+    print(f"\n🚀 Следующий шаг: обучение Piper")
     
     if success_count > 0:
         total_size = sum(f.stat().st_size for f in Path(OUTPUT_DIR).glob('*.wav'))
