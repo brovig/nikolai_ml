@@ -122,6 +122,8 @@ class VitsModel(pl.LightningModule):
         self._y = None
         self._y_hat = None
 
+
+        self._log_vram_interval: int = 10
         self._perf_batch_count = 0
         self._perf_interval_batches = 50
         self._perf_wall_start = time.perf_counter()
@@ -382,8 +384,9 @@ class VitsModel(pl.LightningModule):
 
             loss_disc_all = loss_disc
            
+            if self._perf_batch_count % self._log_vram_interval == 0:
+                self._log_vram("TRAIN")
 
-            self._log_vram("TRAIN")
             self.log("loss_disc_all", loss_disc_all)
 
             return loss_disc_all
