@@ -293,10 +293,10 @@ class VitsModel(pl.LightningModule):
 
     def training_step(self, batch: Batch, batch_idx: int, optimizer_idx: int):
         if optimizer_idx == 0:
-            return self.training_step_g(*batch)
+            return self.training_step_g(batch)
 
         if optimizer_idx == 1:
-            return self.training_step_d(*batch)
+            return self.training_step_d(batch)
 
         raise RuntimeError(f"Unexpected optimizer_idx={optimizer_idx}")
 
@@ -379,7 +379,7 @@ class VitsModel(pl.LightningModule):
             loss_disc, _losses_disc_r, _losses_disc_g = discriminator_loss(
                 y_d_hat_r, y_d_hat_g
             )
-            
+
             loss_disc_all = loss_disc
            
 
