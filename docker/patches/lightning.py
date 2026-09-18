@@ -121,12 +121,77 @@ class VitsModel(pl.LightningModule):
         # State kept between training optimizers
         self._y = None
         self._y_hat = None
-        self._perf_time = time.perf_counter()
-        self._perf_step = 0
+
+        self._perf_batch_count = 0
+        self._perf_interval_batches = 50
+        self._perf_wall_start = time.perf_counter()
+
+        self._perf_gpu_start = None
+        self._perf_gpu_end = None
+
+        if torch.cuda.is_available():
+            self._perf_gpu_start = torch.cuda.Event(enable_timing=True)
+            self._perf_gpu_end = torch.cuda.Event(enable_timing=True)
+
+
 
     def on_train_epoch_start(self):
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats()
+
+
+    def on_train_batch_start(self, batch, batch_idx):
+        if (
+            torch.cuda.is_available()
+            and self._perf_gpu_start is not None
+            and self._perf_batch_count % self._perf_interval_batches == 0
+        ):
+            self._perf_gpu_start.record()
+
+
+    def on_train_batch_end(self, outputs, batch, batch_idx):
+        if not torch.cuda.is_available():
+            return
+
+        self._perf_batch_count += 1
+
+        if (
+            self._perf_gpu_start is None
+            or self._perf_gpu_end is None
+            or self._perf_batch_count % self._perf_interval_batches != 0
+        ):
+            return
+
+        self._perf_gpu_end.record()
+
+        # GPU работает асинхронно.
+        # Ждём только один раз на 50 batch.
+        self._perf_gpu_end.synchronize()
+
+        gpu_sec = (
+            self._perf_gpu_start.elapsed_time(self._perf_gpu_end) / 1000.0
+        )
+
+        wall_now = time.perf_counter()
+        wall_sec = wall_now - self._perf_wall_start
+
+        batches = self._perf_interval_batches
+        samples = batches * self.hparams.batch_size
+
+        print(
+            f"[PERF] "
+            f"epoch={self.current_epoch} "
+            f"batch={self._perf_batch_count} "
+            f"GPU={gpu_sec:.2f}s "
+            f"wall={wall_sec:.2f}s "
+            f"GPU/batch={gpu_sec / batches:.3f}s "
+            f"samples/sec={samples / max(0.001, gpu_sec):.2f} "
+            f"batches/min={batches / max(0.001, gpu_sec) * 60:.1f}",
+            flush=True,
+        )
+
+        self._perf_wall_start = wall_now
+
 
     def _log_vram(self, stage: str) -> None:
         if not torch.cuda.is_available():
@@ -148,20 +213,6 @@ class VitsModel(pl.LightningModule):
             flush=True,
         )
 
-        if self.global_step > 0 and self.global_step % 100 == 0:
-            now = time.perf_counter()
-            elapsed = now - self._perf_time
-            steps = self.global_step - self._perf_step
-
-            print(
-                f"[PERF] steps={steps} "
-                f"elapsed={elapsed:.1f}s "
-                f"sec/step={elapsed / steps:.3f}",
-                flush=True,
-            )
-
-            self._perf_time = now
-            self._perf_step = self.global_step
 
     def _load_datasets(
         self,
@@ -242,13 +293,14 @@ class VitsModel(pl.LightningModule):
 
     def training_step(self, batch: Batch, batch_idx: int, optimizer_idx: int):
         if optimizer_idx == 0:
-            return self.training_step_g(batch)
+            return self.training_step_g(*batch)
 
         if optimizer_idx == 1:
-            return self.training_step_d(batch)
+            return self.training_step_d(*batch)
+
+        raise RuntimeError(f"Unexpected optimizer_idx={optimizer_idx}")
 
     def training_step_g(self, batch: Batch):
-        self._log_vram("TRAIN")
         x, x_lengths, y, _, spec, spec_lengths, speaker_ids = (
             batch.phoneme_ids,
             batch.phoneme_lengths,
@@ -327,7 +379,11 @@ class VitsModel(pl.LightningModule):
             loss_disc, _losses_disc_r, _losses_disc_g = discriminator_loss(
                 y_d_hat_r, y_d_hat_g
             )
+            
             loss_disc_all = loss_disc
+           
+
+            self._log_vram("TRAIN")
             self.log("loss_disc_all", loss_disc_all)
 
             return loss_disc_all
