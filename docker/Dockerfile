@@ -119,6 +119,18 @@ RUN git clone https://github.com/rhasspy/piper.git /tmp/piper \
 COPY patches/lightning.py \
     /tmp/piper/src/python/piper_train/vits/lightning.py
 
+# Piper's __main__.py calls Trainer.add_argparse_args / Trainer.from_argparse_args,
+# both REMOVED in Lightning 2.x. Our patched version adds trainer args manually
+# and constructs Trainer directly (resume passed to fit()).
+COPY patches/__main__.py \
+    /tmp/piper/src/python/piper_train/__main__.py
+
+# Piper's __main__.py uses Trainer.add_argparse_args / Trainer.from_argparse_args,
+# which were REMOVED in Lightning 2.x. Patch it to add trainer args manually
+# and construct Trainer directly (see patches/__main__.py).
+COPY patches/__main__.py \
+    /tmp/piper/src/python/piper_train/__main__.py
+
 
 # ------------------------------------------------------------
 # Install Piper itself WITHOUT dependencies.

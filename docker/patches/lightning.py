@@ -79,6 +79,11 @@ class VitsModel(pl.LightningModule):
         **kwargs,
     ):
         super().__init__()
+        # Lightning 2.x: multiple optimizers (G + D) require manual optimization;
+        # automatic multi-optimizer mode was removed in PL 2.0.
+        # NOTE: must be set AFTER super().__init__() (PL 2.2 base init resets
+        # self._automatic_optimization = True).
+        self.automatic_optimization = False
         self.save_hyperparameters()
 
 
@@ -293,14 +298,24 @@ class VitsModel(pl.LightningModule):
             prefetch_factor=2,
         )
 
-    def training_step(self, batch: Batch, batch_idx: int, optimizer_idx: int):
-        if optimizer_idx == 0:
-            return self.training_step_g(batch)
+    def training_step(self, batch: Batch, batch_idx: int):
+        # Lightning 2.x manual optimization: step generator, then discriminator.
+        # Mirrors the old automatic two-optimizer behaviour (one G step and one
+        # D step per batch); D is frozen while the generator loss backprops so
+        # no stale gradients accumulate on D.
+        opt_g, opt_d = self.optimizers()
 
-        if optimizer_idx == 1:
-            return self.training_step_d(batch)
+        loss_g = self.training_step_g(batch)
+        # D gradients from the generator loss (GAN/feature-matching terms)
+        # are cleared by opt_d.zero_grad() below before the D backward.
+        opt_g.zero_grad()
+        self.manual_backward(loss_g)
+        opt_g.step()
 
-        raise RuntimeError(f"Unexpected optimizer_idx={optimizer_idx}")
+        loss_d = self.training_step_d(batch)
+        opt_d.zero_grad()
+        self.manual_backward(loss_d)
+        opt_d.step()
 
     def training_step_g(self, batch: Batch):
         x, x_lengths, y, _, spec, spec_lengths, speaker_ids = (
@@ -441,7 +456,18 @@ class VitsModel(pl.LightningModule):
             ),
         ]
 
-        return optimizers, schedulers
+        # Lightning 2.x: multiple-dicts form — one dict per optimizer. (The
+        # single-dict form wraps the optimizer in a list and breaks with two.)
+        return [
+            {
+                "optimizer": optimizers[0],
+                "lr_scheduler": {"scheduler": schedulers[0], "interval": "epoch"},
+            },
+            {
+                "optimizer": optimizers[1],
+                "lr_scheduler": {"scheduler": schedulers[1], "interval": "epoch"},
+            },
+        ]
 
     @staticmethod
     def add_model_specific_args(parent_parser):
