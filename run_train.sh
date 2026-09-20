@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Run inside container: bash /nikolai_ml/run_train.sh
-# V100 32GB: medium Piper architecture (192/192/768/6/2), big batch.
-# Adjust --batch-size after watching [VRAM] peak_reserved (keep <= ~28 GB).
+# RTX 5070 Ti 16 GB: medium Piper architecture (192/192/768/6/2).
+# ~4 GB VRAM is used by the desktop (X server), so keep [VRAM]
+# peak_reserved <= ~11 GB after the batch-size probe.
 set -euo pipefail
 cd /nikolai_ml
 

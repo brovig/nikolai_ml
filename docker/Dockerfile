@@ -1,4 +1,10 @@
-FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+
+# NOTE (rtx5070ti): the plan suggested ubuntu24.04/python3.12, but
+# piper-phonemize==1.1.0 ships no cp312 manylinux x86_64 wheel (cp310 is the
+# newest for this target), and monotonic_align's setup.py relies on
+# `distutils` which was removed in Python 3.12. Staying on ubuntu22.04
+# (python3.10) keeps both buildable with zero source edits.
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -7,7 +13,9 @@ ENV TZ=UTC \
     PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    UV_HTTP_TIMEOUT=300 \
+    UV_HTTP_RETRIES=10
 
 WORKDIR /app
 
@@ -37,24 +45,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN python3 -m venv "${VIRTUAL_ENV}" \
     && python -m pip install --upgrade \
         pip==24.0 \
-        setuptools==80.9.0 \
+        setuptools==68.0.0 \
         wheel==0.45.1 \
     && python -m pip install \
         uv==0.5.24
 
 # ------------------------------------------------------------
-# PyTorch GPU stack
+# PyTorch GPU stack (Blackwell / sm_120)
 #
 # Intentionally installed BEFORE Piper.
-# Piper's requirements.txt contains torch<2, but we use the
-# known working training stack and install Piper with --no-deps.
+# Piper's requirements.txt contains torch<2, but we use a modern
+# cu128 stack (required for RTX 5070 Ti / Blackwell) and install
+# Piper with --no-deps.
 # ------------------------------------------------------------
 
+# UV_HTTP_TIMEOUT / UV_HTTP_RETRIES (set in ENV): the host network is
+# flaky; uv's defaults (30 s / 5 retries) caused mid-download timeouts.
 RUN uv pip install \
-        torch==2.5.1+cu124 \
-        torchvision==0.20.1+cu124 \
-        torchaudio==2.5.1+cu124 \
-        --index-url https://download.pytorch.org/whl/cu124
+        torch==2.8.0+cu128 \
+        torchvision==0.23.0+cu128 \
+        torchaudio==2.8.0+cu128 \
+        --index-url https://download.pytorch.org/whl/cu128
 
 # ------------------------------------------------------------
 # Piper direct dependencies
@@ -62,8 +73,9 @@ RUN uv pip install \
 # These correspond to Piper commit:
 # 73c04d81d5590ecc46e522de3601ce7fb29fc2be
 #
-# Piper itself is installed later with --no-deps so it cannot
-# downgrade/replace the GPU stack above.
+# piper-phonemize 1.1.0 has a cp310 manylinux wheel (hence python3.10 base).
+# Cython is kept at 0.29.x: monotonic_align is built with it and it is the
+# one spot in the whole image that may fight modern toolchains.
 # ------------------------------------------------------------
 
 RUN uv pip install \
@@ -71,19 +83,21 @@ RUN uv pip install \
         piper-phonemize==1.1.0 \
         librosa==0.10.2.post1 \
         numpy==1.26.4 \
-        onnxruntime==1.20.1
+        onnxruntime
 
 # ------------------------------------------------------------
 # Training/runtime compatibility dependencies
+#
+# Lightning 2.x (last 2.2 release for maximum API stability).
 # ------------------------------------------------------------
 
 RUN uv pip install \
-        pytorch-lightning==1.9.0 \
-        torchmetrics==0.11.4 \
-        tensorboard==2.18.0 \
-        scipy==1.11.4 \
-        soundfile==0.12.1 \
-        pillow==11.0.0
+        "pytorch-lightning==2.2.*" \
+        "torchmetrics==1.*" \
+        tensorboard \
+        scipy \
+        soundfile \
+        pillow
 
 # ------------------------------------------------------------
 # Fetch EXACT Piper source revision
@@ -97,12 +111,15 @@ RUN git clone https://github.com/rhasspy/piper.git /tmp/piper \
 
 # ------------------------------------------------------------
 # Replace Piper lightning.py with our reproducible version
+#
+# Build context is ./docker, so the path is patches/lightning.py.
+# (NEVER docker/patches/... here — that was commit 1892ca4's bug.)
 # ------------------------------------------------------------
 
 COPY patches/lightning.py \
     /tmp/piper/src/python/piper_train/vits/lightning.py
 
-    
+
 # ------------------------------------------------------------
 # Install Piper itself WITHOUT dependencies.
 #
