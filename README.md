@@ -1,3 +1,25 @@
+Start container:
+```
+docker compose up --build -d
+```
+
+Open a bash console in the container.:
+```
+docker exec -it piper-train-nikolai bash
+```
+
+Preprocess script:
+```
+python -m piper_train.preprocess \
+    --input-dir /nikolai_ml/dataset_nikolai \
+    --output-dir /nikolai_ml/preprocessed \
+    --language ru \
+    --sample-rate 22050 \
+    --dataset-format ljspeech \
+    --single-speaker \
+    --max-workers 4
+```
+
 Start script:
 ```
 cd /nikolai_ml
@@ -20,17 +42,7 @@ python -m piper_train \
     --n-heads 2
 ```
 
-Preprocess script:
+Delete checkpoints/logs
 ```
-python -m piper_train.preprocess \
-    --input-dir /nikolai_ml/dataset_nikolai \
-    --output-dir /nikolai_ml/preprocessed \
-    --language ru \
-    --sample-rate 22050 \
-    --dataset-format ljspeech \
-    --single-speaker \
-    --max-workers 4
+rm -rf checkpoints/lightning_logs
 ```
-
-
-docker exec -it piper-train-nikolai bash
