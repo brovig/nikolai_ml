@@ -99,7 +99,7 @@ RUN git clone https://github.com/rhasspy/piper.git /tmp/piper \
 # Replace Piper lightning.py with our reproducible version
 # ------------------------------------------------------------
 
-COPY docker/patches/lightning.py \
+COPY patches/lightning.py \
     /tmp/piper/src/python/piper_train/vits/lightning.py
 
     

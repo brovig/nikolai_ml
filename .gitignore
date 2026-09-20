@@ -12,3 +12,6 @@ preprocessed/*
 !preprocessed/.gitkeep
 
 checkpoints/
+dataset_nikolai.tar.gz
+*.log
+__pycache__/
