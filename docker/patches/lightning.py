@@ -426,8 +426,14 @@ class VitsModel(pl.LightningModule):
             test_audio = test_audio * (1.0 / max(0.01, abs(test_audio.max())))
 
             tag = test_utt.text or str(utt_idx)
+            # Manual optimization leaves self.global_step at 0, so logging at
+            # the default step would overwrite every epoch's samples. Use the
+            # epoch number as the step instead (1 per validation pass).
             self.logger.experiment.add_audio(
-                tag, test_audio, sample_rate=self.hparams.sample_rate
+                tag,
+                test_audio,
+                global_step=self.current_epoch,
+                sample_rate=self.hparams.sample_rate,
             )
 
         return val_loss

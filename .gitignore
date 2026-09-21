@@ -15,3 +15,8 @@ checkpoints/
 dataset_nikolai.tar.gz
 *.log
 __pycache__/
+
+# Artifacts (transfer out-of-band; regenerate via docker/patches scripts)
+onnx/
+samples_final/
+*.tar.gz
